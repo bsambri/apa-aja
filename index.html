@@ -53,7 +53,7 @@
     .music-btn:hover { transform: scale(1.1); }
     .play-pause { font-size: 1.4rem; }
 
-    /* Controls Zoom / Reset */
+    /* Controls Zoom / Reset Canvas Utama */
     .controls {
       position: fixed;
       bottom: 30px;
@@ -128,7 +128,7 @@
     }
 
     /* ==========================================
-        MODAL / POPUP LIGHTBOX (YANG DIPERBAIKI)
+        MODAL / POPUP LIGHTBOX & ZOOM DI SEBELAHNYA
         ========================================== */
     .modal-overlay {
       position: fixed;
@@ -152,32 +152,71 @@
       pointer-events: auto;
     }
 
+    /* Wrapper untuk ngebungkus Modal Card + Tombol Zoom di sebelah kanannya */
+    .modal-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transform: scale(0.7);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .modal-overlay.active .modal-wrapper {
+      transform: scale(1);
+    }
+
     .modal-card {
       position: relative;
       background-color: var(--white);
       width: 260px;
-      max-width: 85vw;
+      max-width: 75vw;
       height: 580px;
-      max-height: 85vh;
+      max-height: 80vh;
       padding: 12px 12px 32px 12px;
       box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
       border-radius: 6px;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      transform: scale(0.7);
-      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
       cursor: default;
-    }
-
-    .modal-overlay.active .modal-card {
-      transform: scale(1);
+      overflow: hidden;
     }
 
     .modal-card .photo-slot {
       height: calc((100% - 20px) / 3);
       min-height: 140px;
       object-fit: cover;
+      transition: transform 0.2s ease;
+      transform-origin: center center;
+    }
+
+    /* Tombol Zoom di Sebelah Kanan Kartu Modal */
+    .modal-zoom-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .zoom-side-btn {
+      background: var(--white);
+      border: 1px solid var(--instax-border);
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #333;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    .zoom-side-btn:hover {
+      background-color: #f0f0f0;
+      transform: scale(1.1);
     }
 
     .modal-close-btn {
@@ -218,7 +257,7 @@
     <button class="music-btn" id="nextBtn" title="Forward">⏭</button>
   </div>
 
-  <!-- Zoom Controls -->
+  <!-- Zoom Controls Canvas Utama -->
   <div class="controls">
     <button class="btn" onclick="zoomCanvas(0.2)">+</button>
     <button class="btn" onclick="zoomCanvas(-0.2)">-</button>
@@ -232,8 +271,16 @@
 
   <!-- Modal Popup -->
   <div class="modal-overlay" id="modalOverlay">
-    <div class="modal-card" id="modalCard">
-      <button class="modal-close-btn" id="closeModalBtn" title="Tutup">✕</button>
+    <div class="modal-wrapper">
+      <div class="modal-card" id="modalCard">
+        <button class="modal-close-btn" id="closeModalBtn" title="Tutup">✕</button>
+      </div>
+      <!-- Tombol Zoom di Sebelah Kanan Modal -->
+      <div class="modal-zoom-controls">
+        <button class="zoom-side-btn" onclick="zoomModal(0.25)" title="Zoom In">+</button>
+        <button class="zoom-side-btn" onclick="zoomModal(-0.25)" title="Zoom Out">-</button>
+        <button class="zoom-side-btn" onclick="resetModalZoom()" title="Reset">⟲</button>
+      </div>
     </div>
   </div>
 
@@ -274,6 +321,25 @@
     const modalOverlay = document.getElementById('modalOverlay');
     const modalCard = document.getElementById('modalCard');
     const closeModalBtn = document.getElementById('closeModalBtn');
+
+    let modalScale = 1.0;
+
+    function zoomModal(amount) {
+      modalScale = Math.min(Math.max(1.0, modalScale + amount), 2.5);
+      updateModalSlotsTransform();
+    }
+
+    function resetModalZoom() {
+      modalScale = 1.0;
+      updateModalSlotsTransform();
+    }
+
+    function updateModalSlotsTransform() {
+      const slots = modalCard.querySelectorAll('.photo-slot');
+      slots.forEach(slot => {
+        slot.style.transform = `scale(${modalScale})`;
+      });
+    }
 
     const photostripsData = [
       ["images/strip1 (1).jpg", "images/strip1 (2).jpg", "images/strip1 (3).jpg"],
@@ -415,6 +481,7 @@
       const oldSlots = modalCard.querySelectorAll('.photo-slot');
       oldSlots.forEach(slot => slot.remove());
       activeModalImages = []; 
+      modalScale = 1.0; // Reset zoom modal setiap kali buka foto baru
       
       for (let j = 0; j < 3; j++) {
         const img = document.createElement('img');
@@ -439,7 +506,7 @@
     modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
-    // Pan & Zoom Logic
+    // Pan & Zoom Logic Canvas (Diperbaiki agar zoom-out stabil tidak geser sendiri)
     let scale = 1.0;
     let pointX = (window.innerWidth / 2) - 1400;
     let pointY = (window.innerHeight / 2) - 1400;
@@ -486,6 +553,7 @@
     let canvasInitialDist = 0;
     let canvasInitialScale = 1.0;
     let canvasStartXDrag = 0, canvasStartYDrag = 0, canvasDragStartXPos = 0, canvasDragStartYPos = 0;
+    let pinchCenterClientX = 0, pinchCenterClientY = 0;
 
     window.addEventListener('pointerdown', (e) => {
       if (e.target.closest('.controls') || e.target.closest('.music-player-container') || modalOverlay.classList.contains('active')) return;
@@ -498,6 +566,8 @@
         const arr = Array.from(canvasPointers.values());
         canvasInitialDist = Math.hypot(arr[0].clientX - arr[1].clientX, arr[0].clientY - arr[1].clientY);
         canvasInitialScale = scale;
+        pinchCenterClientX = (arr[0].clientX + arr[1].clientX) / 2;
+        pinchCenterClientY = (arr[0].clientY + arr[1].clientY) / 2;
       }
     });
 
@@ -513,13 +583,18 @@
         isMovedDuringDrag = true;
         const arr = Array.from(canvasPointers.values());
         const dist = Math.hypot(arr[0].clientX - arr[1].clientX, arr[0].clientY - arr[1].clientY);
+        pinchCenterClientX = (arr[0].clientX + arr[1].clientX) / 2;
+        pinchCenterClientY = (arr[0].clientY + arr[1].clientY) / 2;
         if (canvasInitialDist > 0) {
-          zoomCanvasAt(canvasInitialScale * (dist / canvasInitialDist), (arr[0].clientX + arr[1].clientX) / 2, (arr[0].clientY + arr[1].clientY) / 2);
+          zoomCanvasAt(canvasInitialScale * (dist / canvasInitialDist), pinchCenterClientX, pinchCenterClientY);
         }
       }
     });
 
-    window.addEventListener('pointerup', (e) => { canvasPointers.delete(e.pointerId); if (canvasPointers.size < 2) canvasInitialDist = 0; });
+    window.addEventListener('pointerup', (e) => { 
+      canvasPointers.delete(e.pointerId); 
+      if (canvasPointers.size < 2) canvasInitialDist = 0; 
+    });
     window.addEventListener('pointercancel', (e) => canvasPointers.delete(e.pointerId));
 
     resetCanvasView();
