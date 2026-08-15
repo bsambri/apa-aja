@@ -159,72 +159,31 @@
       pointer-events: auto;
     }
 
-    /* Container Modal yang bisa digeser dan di-zoom */
-    .modal-viewport {
-      width: 360px;
-      height: 816px;
-      position: relative;
-      overflow: hidden;
-      border-radius: 6px;
-      cursor: grab;
-      touch-action: none;
-    }
-
-    .modal-viewport:active {
-      cursor: grabbing;
-    }
-
+    /* Kartu Modal Statis (Tidak bisa di-drag, proporsional di HP) */
     .modal-card {
       background-color: var(--white);
-      width: 360px;
-      height: 816px;
-      padding: 18px 18px 50px 18px;
+      width: 320px;
+      height: 720px;
+      padding: 16px 16px 45px 16px;
       box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
       border-radius: 6px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      transform-origin: 0 0;
-      will-change: transform;
-      position: absolute;
-      top: 0;
-      left: 0;
+      gap: 14px;
+      transform: scale(0.7);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      cursor: default;
     }
 
-    .modal-overlay.active .modal-viewport {
-      animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-    }
-
-    @keyframes modalPop {
-      0% { transform: scale(0.7); opacity: 0; }
-      100% { transform: scale(1); opacity: 1; }
+    .modal-overlay.active .modal-card {
+      transform: scale(1);
     }
 
     /* Slot Foto di dalam Modal */
     .modal-card .photo-slot {
-      height: 228px; 
+      height: 200px; 
       object-fit: cover;
       background-color: var(--empty-bg);
-    }
-
-    /* Tombol Kontrol Khusus Modal di Kanan */
-    .modal-controls {
-      position: absolute;
-      right: 20px;
-      top: 50%;
-      transform: translateY(-50%);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      z-index: 1000000;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s ease;
-    }
-
-    .modal-overlay.active .modal-controls {
-      opacity: 1;
-      pointer-events: auto;
     }
   </style>
 </head>
@@ -244,23 +203,13 @@
 
   <!-- Lightbox Popup Modal -->
   <div class="modal-overlay" id="modalOverlay">
-    <div class="modal-viewport" id="modalViewport">
-      <div class="modal-card" id="modalCard"></div>
-    </div>
-    
-    <!-- Tombol Kontrol Zoom Modal -->
-    <div class="modal-controls">
-      <button class="btn" onclick="zoomModal(0.3)">+</button>
-      <button class="btn" onclick="zoomModal(-0.3)">-</button>
-      <button class="btn" onclick="resetModalView()">⟲</button>
-    </div>
+    <div class="modal-card" id="modalCard"></div>
   </div>
 
   <script>
     const canvas = document.getElementById('canvas');
     const viewport = document.getElementById('viewport');
     const modalOverlay = document.getElementById('modalOverlay');
-    const modalViewport = document.getElementById('modalViewport');
     const modalCard = document.getElementById('modalCard');
 
     // DAFTAR FOTO
@@ -410,52 +359,11 @@
     }
 
     // ==========================================
-    // MODAL & ZOOM ENGINE (DIPAS GER & ZOOM-FIT AMAN)
+    // MODAL ENGINE
     // ==========================================
-    let modalScale = 1.0;
-    let modalPointX = 0;
-    let modalPointY = 0;
-
-    function renderModalTransform() {
-      modalCard.style.transform = `translate3d(${modalPointX}px, ${modalPointY}px, 0px) scale(${modalScale})`;
-    }
-
-    function resetModalView() {
-      modalScale = 1.0;
-      modalPointX = 0;
-      modalPointY = 0;
-      renderModalTransform();
-    }
-
-    function zoomModalAt(targetScale, clientX, clientY) {
-      const newScale = Math.min(Math.max(1.0, targetScale), 3.5);
-      if (newScale === modalScale) return;
-
-      const rect = modalViewport.getBoundingClientRect();
-      const mouseX = clientX - rect.left - modalPointX;
-      const mouseY = clientY - rect.top - modalPointY;
-
-      modalPointX -= (mouseX / modalScale) * (newScale - modalScale);
-      modalPointY -= (mouseY / modalScale) * (newScale - modalScale);
-      modalScale = newScale;
-
-      if (modalScale === 1.0) {
-        modalPointX = 0;
-        modalPointY = 0;
-      }
-
-      renderModalTransform();
-    }
-
-    function zoomModal(amount) {
-      const rect = modalViewport.getBoundingClientRect();
-      zoomModalAt(modalScale + amount, rect.left + rect.width / 2, rect.top + rect.height / 2);
-    }
-
     function openModal(photos) {
       modalCard.innerHTML = '';
       activeModalImages = []; 
-      resetModalView();
       
       for (let j = 0; j < 3; j++) {
         const img = document.createElement('img');
@@ -469,20 +377,6 @@
       }
       
       modalOverlay.classList.add('active');
-
-      // Penyesuaian otomatis ukuran modal di HP supaya langsung pas (Fit to Screen)
-      setTimeout(() => {
-        const screenHeight = window.innerHeight;
-        const screenWidth = window.innerWidth;
-        const cardHeight = 816;
-        const cardWidth = 360;
-
-        let scaleFactor = Math.min((screenHeight * 0.82) / cardHeight, (screenWidth * 0.85) / cardWidth, 1.0);
-        if (scaleFactor < 1.0) {
-          modalScale = scaleFactor;
-          renderModalTransform();
-        }
-      }, 50);
     }
 
     function closeModal() {
@@ -493,63 +387,15 @@
       activeModalImages = [];
     }
 
+    // Klik area luar (overlay) untuk menutup modal, klik di dalam kartu modal tidak menutup
     modalOverlay.addEventListener('click', (e) => {
-      if (e.target === modalOverlay) closeModal();
+      if (e.target === modalOverlay) {
+        closeModal();
+      }
     });
+
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeModal();
-    });
-
-    // Touch & Mouse Support untuk Modal (Pinch & Drag)
-    const modalPointers = new Map();
-    let modalInitialDist = 0;
-    let modalInitialScale = 1.0;
-
-    modalViewport.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const zoomFactor = -e.deltaY * 0.002;
-      zoomModalAt(modalScale + zoomFactor, e.clientX, e.clientY);
-    }, { passive: false });
-
-    modalViewport.addEventListener('pointerdown', (e) => {
-      modalPointers.set(e.pointerId, e);
-      if (modalPointers.size === 1) {
-        modalStartXDrag = e.clientX - modalPointX;
-        modalStartYDrag = e.clientY - modalPointY;
-      } else if (modalPointers.size === 2) {
-        const pointersArr = Array.from(modalPointers.values());
-        modalInitialDist = Math.hypot(pointersArr[0].clientX - pointersArr[1].clientX, pointersArr[0].clientY - pointersArr[1].clientY);
-        modalInitialScale = modalScale;
-      }
-    });
-
-    window.addEventListener('pointermove', (e) => {
-      if (!modalPointers.has(e.pointerId)) return;
-      modalPointers.set(e.pointerId, e);
-
-      if (modalPointers.size === 1 && modalScale > 0.3) {
-        modalPointX = e.clientX - modalStartXDrag;
-        modalPointY = e.clientY - modalStartYDrag;
-        renderModalTransform();
-      } else if (modalPointers.size === 2) {
-        const pointersArr = Array.from(modalPointers.values());
-        const currentDist = Math.hypot(pointersArr[0].clientX - pointersArr[1].clientX, pointersArr[0].clientY - pointersArr[1].clientY);
-        if (modalInitialDist > 0) {
-          const factor = currentDist / modalInitialDist;
-          const centerX = (pointersArr[0].clientX + pointersArr[1].clientX) / 2;
-          const centerY = (pointersArr[0].clientY + pointersArr[1].clientY) / 2;
-          zoomModalAt(modalInitialScale * factor, centerX, centerY);
-        }
-      }
-    });
-
-    window.addEventListener('pointerup', (e) => {
-      modalPointers.delete(e.pointerId);
-      if (modalPointers.size < 2) modalInitialDist = 0;
-    });
-
-    window.addEventListener('pointercancel', (e) => {
-      modalPointers.delete(e.pointerId);
     });
 
     // ==========================================
@@ -604,7 +450,6 @@
       zoomCanvasAt(scale + zoomFactor, e.clientX, e.clientY);
     }, { passive: false });
 
-    // Multi-touch Pointer tracking untuk Canvas Utama (Pinch & Pan)
     const canvasPointers = new Map();
     let canvasInitialDist = 0;
     let canvasInitialScale = 1.0;
