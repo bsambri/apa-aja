@@ -31,7 +31,7 @@
       font-family: var(--font-stack);
     }
 
-    /* Controls UI Utama */
+    /* Controls UI Utama (Zoom/Reset) */
     .controls {
       position: fixed;
       bottom: 30px;
@@ -60,6 +60,71 @@
     .btn:hover {
       box-shadow: 0 6px 16px var(--shadow-hard);
       transform: translateY(-2px);
+    }
+
+    /* ==========================================
+        MUSIC PLAYER MINIMALIS (OVAL LANDSCAPE)
+        ========================================== */
+    .music-player-container {
+      position: fixed;
+      top: 25px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      z-index: 99999;
+      pointer-events: auto;
+    }
+
+    .music-player {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(240, 240, 240, 0.8);
+      padding: 8px 18px;
+      border-radius: 50px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      transition: all 0.2s ease;
+    }
+
+    .music-player:hover {
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      background: rgba(255, 255, 255, 0.95);
+    }
+
+    .music-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1rem;
+      color: #444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s ease, color 0.15s ease;
+      padding: 4px;
+    }
+
+    .music-btn:hover {
+      color: #000;
+      transform: scale(1.15);
+    }
+
+    .music-btn.play-pause {
+      font-size: 1.25rem;
+    }
+
+    .music-label {
+      font-size: 0.72rem;
+      letter-spacing: 2px;
+      color: #666;
+      text-transform: lowercase;
+      font-weight: 500;
     }
 
     /* Viewport & Canvas */
@@ -159,18 +224,18 @@
       pointer-events: auto;
     }
 
-    /* Kartu Modal Statis (Dikecilkan ~5-8% dari sebelumnya) */
+    /* Kartu Modal Statis */
     .modal-card {
       position: relative;
       background-color: var(--white);
-      width: 298px;
-      height: 672px;
-      padding: 15px 15px 42px 15px;
+      width: 275px;
+      height: 620px;
+      padding: 14px 14px 38px 14px;
       box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
       border-radius: 6px;
       display: flex;
       flex-direction: column;
-      gap: 13px;
+      gap: 12px;
       transform: scale(0.7);
       transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
       cursor: default;
@@ -182,7 +247,7 @@
 
     /* Slot Foto di dalam Modal */
     .modal-card .photo-slot {
-      height: 185px; 
+      height: 170px; 
       object-fit: cover;
       background-color: var(--empty-bg);
     }
@@ -190,15 +255,15 @@
     /* Tombol Back / Close di Pojok Kiri Atas Modal */
     .modal-close-btn {
       position: absolute;
-      top: -15px;
-      left: -15px;
-      width: 36px;
-      height: 36px;
+      top: -14px;
+      left: -14px;
+      width: 35px;
+      height: 35px;
       background-color: var(--white);
       border: 1px solid var(--instax-border);
       border-radius: 50%;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-      font-size: 1.05rem;
+      font-size: 1rem;
       font-weight: bold;
       color: #333;
       cursor: pointer;
@@ -216,6 +281,21 @@
   </style>
 </head>
 <body>
+
+  <!-- Audio Element -->
+  <audio id="bg-music" loop>
+    <source src="lagu.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- Music Player Minimalis Oval -->
+  <div class="music-player-container">
+    <div class="music-player">
+      <button class="music-btn" id="prevBtn" title="Rewind">⏮</button>
+      <button class="music-btn play-pause" id="playPauseBtn" title="Play/Pause">▶</button>
+      <button class="music-btn" id="nextBtn" title="Forward">⏭</button>
+    </div>
+    <div class="music-label">mari bercerita</div>
+  </div>
 
   <!-- Controls Utama -->
   <div class="controls">
@@ -237,6 +317,66 @@
   </div>
 
   <script>
+    // ==========================================
+    // MUSIC PLAYER ENGINE
+    // ==========================================
+    const audio = document.getElementById('bg-music');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    let isPlaying = false;
+
+    function togglePlay() {
+      if (isPlaying) {
+        audio.pause();
+        playPauseBtn.textContent = '▶';
+        isPlaying = false;
+      } else {
+        audio.play().then(() => {
+          playPauseBtn.textContent = '⏸';
+          isPlaying = true;
+        }).catch(err => {
+          console.log("Autoplay dicegah browser, menunggu interaksi user.");
+        });
+      }
+    }
+
+    playPauseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePlay();
+    });
+
+    // Tombol mundur 5 detik (backward)
+    prevBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audio.currentTime = Math.max(0, audio.currentTime - 5);
+    });
+
+    // Tombol maju 5 detik (forward)
+    nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 5);
+    });
+
+    // Autoplay interaksi pertama kali di layar
+    function handleFirstInteraction() {
+      if (!isPlaying) {
+        audio.play().then(() => {
+          playPauseBtn.textContent = '⏸';
+          isPlaying = true;
+        }).catch(() => {});
+      }
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
+    }
+
+    window.addEventListener('click', handleFirstInteraction, { once: true });
+    window.addEventListener('touchstart', handleFirstInteraction, { once: true });
+
+
+    // ==========================================
+    // COLLAGE ENGINE
+    // ==========================================
     const canvas = document.getElementById('canvas');
     const viewport = document.getElementById('viewport');
     const modalOverlay = document.getElementById('modalOverlay');
@@ -496,7 +636,7 @@
     let canvasDragStartYPos = 0;
 
     window.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.controls') || modalOverlay.classList.contains('active')) return;
+      if (e.target.closest('.controls') || e.target.closest('.music-player-container') || modalOverlay.classList.contains('active')) return;
       
       canvasPointers.set(e.pointerId, e);
 
