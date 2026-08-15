@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dense Minimalist Instax Collage</title>
+  <style>
+    :root {
+      --bg-color: #fafafa;
+      --white: #ffffff;
+      --instax-border: #f2f2f2;
+      --shadow-soft: rgba(0, 0, 0, 0.05);
+      --shadow-hard: rgba(0, 0, 0, 0.15);
+      --font-stack: 'Courier New', Courier, monospace;
+      --empty-bg: #f0f0f0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: var(--font-stack);
+    }
+
+    /* Controls UI Utama */
+    .controls {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      display: flex;
+      gap: 10px;
+      z-index: 9999;
+    }
+
+    .btn {
+      background: var(--white);
+      border: 1px solid var(--instax-border);
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      box-shadow: 0 4px 12px var(--shadow-soft);
+      cursor: pointer;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+      color: #333;
+    }
+
+    .btn:hover {
+      box-shadow: 0 6px 16px var(--shadow-hard);
+      transform: translateY(-2px);
+    }
+
+    /* Viewport & Canvas */
+    .viewport {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      position: relative;
+      touch-action: none;
+    }
+
+    .viewport:active {
+      cursor: grabbing;
+    }
+
+    .canvas {
+      position: absolute;
+      width: 2800px;
+      height: 2800px;
+      top: 0;
+      left: 0;
+      transform-origin: 0 0;
+      will-change: transform;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+
+    /* Outer Limit Border */
+    .collage-bounds {
+      position: absolute;
+      border: 4px dashed #94a3b8;
+      border-radius: 12px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Instax Frame Base Style */
+    .instax-frame {
+      position: absolute;
+      background-color: var(--white);
+      width: 192px;
+      height: 456px;
+      padding: 12px 12px 34px 12px;
+      box-shadow: 2px 4px 10px var(--shadow-soft), -1px -1px 5px var(--shadow-soft);
+      border: 1px solid var(--instax-border);
+      border-radius: 2px;
+      transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.25s ease, opacity 0.25s ease;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      opacity: 0.88;
+      will-change: transform, opacity;
+      backface-visibility: hidden;
+      pointer-events: auto;
+    }
+
+    .instax-frame:hover {
+      opacity: 1;
+      box-shadow: 0 12px 28px var(--shadow-hard);
+      z-index: 9999 !important;
+      transform: scale(1.08) rotate(0deg) translateZ(0) !important;
+    }
+
+    .photo-slot {
+      width: 100%;
+      height: 125px;
+      object-fit: cover;
+      background-color: var(--empty-bg);
+      border-radius: 2px;
+      display: block;
+      pointer-events: none;
+    }
+
+    /* ==========================================
+        MODAL / POPUP LIGHTBOX
+        ========================================== */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Container Modal yang bisa digeser dan di-zoom */
+    .modal-viewport {
+      width: 360px;
+      height: 816px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 6px;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .modal-viewport:active {
+      cursor: grabbing;
+    }
+
+    .modal-card {
+      background-color: var(--white);
+      width: 360px;
+      height: 816px;
+      padding: 18px 18px 50px 18px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transform-origin: 0 0;
+      will-change: transform;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .modal-overlay.active .modal-viewport {
+      animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    @keyframes modalPop {
+      0% { transform: scale(0.7); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Slot Foto di dalam Modal */
+    .modal-card .photo-slot {
+      height: 228px; 
+      object-fit: cover;
+      background-color: var(--empty-bg);
+    }
+
+    /* Tombol Kontrol Khusus Modal di Kanan */
+    .modal-controls {
+      position: absolute;
+      right: 30px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 1000000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-overlay.active .modal-controls {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Controls Utama -->
+  <div class="controls">
+    <button class="btn" onclick="zoomCanvas(0.2)">+</button>
+    <button class="btn" onclick="zoomCanvas(-0.2)">-</button>
+    <button class="btn" onclick="resetCanvasView()">⟲</button>
+  </div>
+
+  <!-- Viewport Utama -->
+  <div class="viewport" id="viewport">
+    <div class="canvas" id="canvas"></div>
+  </div>
+
+  <!-- Lightbox Popup Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-viewport" id="modalViewport">
+      <div class="modal-card" id="modalCard"></div>
+    </div>
+    
+    <!-- Tombol Kontrol Zoom Modal -->
+    <div class="modal-controls">
+      <button class="btn" onclick="zoomModal(0.3)">+</button>
+      <button class="btn" onclick="zoomModal(-0.3)">-</button>
+      <button class="btn" onclick="resetModalView()">⟲</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const viewport = document.getElementById('viewport');
+    const modalOverlay = document.getElementById('modalOverlay');
+    const modalViewport = document.getElementById('modalViewport');
+    const modalCard = document.getElementById('modalCard');
+
+    // DAFTAR FOTO
+    const photostripsData = [
+      ["images/strip1 (1).jpg", "images/strip1 (2).jpg", "images/strip1 (3).jpg"],
+      ["images/strip2 (1).jpg", "images/strip2 (2).jpg", "images/strip2 (3).jpg"],
+      ["images/strip3 (1).jpg", "images/strip3 (2).jpg", "images/strip3 (3).jpg"],
+      ["images/strip4 (1).jpg", "images/strip4 (2).jpg", "images/strip4 (3).jpg"],
+      ["images/strip5 (1).jpg", "images/strip5 (2).jpg", "images/strip5 (3).jpg"],
+      ["images/strip6 (1).jpg", "images/strip6 (2).jpg", "images/strip6 (3).jpg"],
+      ["images/strip7 (1).jpg", "images/strip7 (2).jpg", "images/strip7 (3).jpg"],
+      ["images/strip8 (1).jpg", "images/strip8 (2).jpg", "images/strip8 (3).jpg"],
+      ["images/strip9 (1).jpg", "images/strip9 (2).jpg", "images/strip9 (3).jpg"],
+      ["images/strip10 (1).jpg", "images/strip10 (2).jpg", "images/strip10 (3).jpg"],
+      ["images/strip11 (1).jpg", "images/strip11 (2).jpg", "images/strip11 (3).jpg"],
+      ["images/strip12 (1).jpg", "images/strip12 (2).jpg", "images/strip12 (3).jpg"],
+      ["images/strip13 (1).jpg", "images/strip13 (2).jpg", "images/strip13 (3).jpg"],
+      ["images/strip14 (1).jpg", "images/strip14 (2).jpg", "images/strip14 (3).jpg"],
+      ["images/strip15 (1).jpg", "images/strip15 (2).jpg", "images/strip15 (3).jpg"],
+      ["images/strip16 (1).jpg", "images/strip16 (2).jpg", "images/strip16 (3).jpg"],
+      ["images/strip17 (1).jpg", "images/strip17 (2).jpg", "images/strip17 (3).jpg"],
+      ["images/strip18 (1).jpg", "images/strip18 (2).jpg", "images/strip18 (3).jpg"],
+      ["images/strip19 (1).jpg", "images/strip19 (2).jpg", "images/strip19 (3).jpg"],
+      ["images/strip20 (1).jpg", "images/strip20 (2).jpg", "images/strip20 (3).jpg"],
+      ["images/strip21 (1).jpg", "images/strip21 (2).jpg", "images/strip21 (3).jpg"],
+      ["images/strip22 (1).jpg", "images/strip22 (2).jpg", "images/strip22 (3).jpg"],
+      ["images/strip23 (1).jpg", "images/strip23 (2).jpg", "images/strip23 (3).jpg"],
+      ["images/strip24 (1).jpg", "images/strip24 (2).jpg", "images/strip24 (3).jpg"],
+      ["images/strip25 (1).jpg", "images/strip25 (2).jpg", "images/strip25 (3).jpg"],
+      ["images/strip26 (1).jpg", "images/strip26 (2).jpg", "images/strip26 (3).jpg"],
+      ["images/strip27 (1).jpg", "images/strip27 (2).jpg", "images/strip27 (3).jpg"],
+      ["images/strip28 (1).jpg", "images/strip28 (2).jpg", "images/strip28 (3).jpg"],
+      ["images/strip29 (1).jpg", "images/strip29 (2).jpg", "images/strip29 (3).jpg"],
+      ["images/strip30 (1).jpg", "images/strip30 (2).jpg", "images/strip30 (3).jpg"],
+      ["images/strip31 (1).jpg", "images/strip31 (2).jpg", "images/strip31 (3).jpg"],
+      ["images/strip32 (1).jpg", "images/strip32 (2).jpg", "images/strip32 (3).jpg"],
+      ["images/strip33 (1).jpg", "images/strip33 (2).jpg", "images/strip33 (3).jpg"],
+      ["images/strip34 (1).jpg", "images/strip34 (2).jpg", "images/strip34 (3).jpg"],
+      ["images/strip35 (1).jpg", "images/strip35 (2).jpg", "images/strip35 (3).jpg"],
+      ["images/strip36 (1).jpg", "images/strip36 (2).jpg", "images/strip36 (3).jpg"],
+      ["images/strip37 (1).jpg", "images/strip37 (2).jpg", "images/strip37 (3).jpg"],
+      ["images/strip38 (1).jpg", "images/strip38 (2).jpg", "images/strip38 (3).jpg"],
+      ["images/strip39 (1).jpg", "images/strip39 (2).jpg", "images/strip39 (3).jpg"],
+      ["images/strip40 (1).jpg", "images/strip40 (2).jpg", "images/strip40 (3).jpg"],
+      ["images/strip41 (1).jpg", "images/strip41 (2).jpg", "images/strip41 (3).jpg"],
+      ["images/strip42 (1).jpg", "images/strip42 (2).jpg", "images/strip42 (3).jpg"],
+      ["images/strip43 (1).jpg", "images/strip43 (2).jpg", "images/strip43 (3).jpg"],
+      ["images/strip44 (1).jpg", "images/strip44 (2).jpg", "images/strip44 (3).jpg"],
+      ["images/strip45 (1).jpg", "images/strip45 (2).jpg", "images/strip45 (3).jpg"],
+      ["images/strip46 (1).jpg", "images/strip46 (2).jpg", "images/strip46 (3).jpg"],
+      ["images/strip47 (1).jpg", "images/strip47 (2).jpg", "images/strip47 (3).jpg"],
+      ["images/strip48 (1).jpg", "images/strip48 (2).jpg", "images/strip48 (3).jpg"]
+    ];
+
+    const defaultPlaceholder = "images/heart.jpg";
+    const compressedCache = {}; 
+    let activeModalImages = []; 
+
+    function getCompressedImageUrl(url, callback) {
+      if (compressedCache[url]) {
+        callback(compressedCache[url]);
+        return;
+      }
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = url;
+      activeModalImages.push(img); 
+
+      img.onload = () => {
+        const canvasEl = document.createElement('canvas');
+        const ctx = canvasEl.getContext('2d');
+        
+        const maxWidth = 800;
+        const scaleSize = maxWidth / img.width;
+        canvasEl.width = maxWidth;
+        canvasEl.height = img.height * scaleSize;
+
+        ctx.drawImage(img, 0, 0, canvasEl.width, canvasEl.height);
+        
+        const compressedDataUrl = canvasEl.toDataURL('image/jpeg', 0.8);
+        compressedCache[url] = compressedDataUrl;
+        callback(compressedDataUrl);
+      };
+      img.onerror = () => {
+        callback(url);
+      };
+    }
+
+    const cols = 8;
+    const rows = 6;
+    const spacingX = 145;
+    const spacingY = 170;
+    const frameWidth = 192;
+    const frameHeight = 456;
+    
+    const startX = 1400 - ((cols - 1) * spacingX) / 2 - (frameWidth / 2);
+    const startY = 1400 - ((rows - 1) * spacingY) / 2 - (frameHeight / 2);
+
+    const padding = 40;
+    const bounds = document.createElement('div');
+    bounds.className = 'collage-bounds';
+    bounds.style.left = `${startX - padding}px`;
+    bounds.style.top = `${startY - padding}px`;
+    bounds.style.width = `${((cols - 1) * spacingX) + frameWidth + (padding * 2)}px`;
+    bounds.style.height = `${((rows - 1) * spacingY) + frameHeight + (padding * 2)}px`;
+    canvas.appendChild(bounds);
+
+    const rotationPattern = [-8, 6, -4, 9, -7, 5, 8, -6, 3, -9, 7, -5, -8, 6, -4, 7, -3, 8, -5, 9];
+    let stripIndex = 0;
+    let isMovedDuringDrag = false;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const frame = document.createElement('div');
+        frame.className = 'instax-frame';
+
+        const posX = startX + (c * spacingX);
+        const posY = startY + (r * spacingY);
+        const rotation = rotationPattern[stripIndex % rotationPattern.length];
+
+        frame.style.left = `${posX}px`;
+        frame.style.top = `${posY}px`;
+        frame.style.transform = `rotate(${rotation}deg) translateZ(0)`;
+        frame.style.zIndex = stripIndex + 1;
+
+        const currentStripPhotos = photostripsData[stripIndex] || [];
+
+        for (let j = 0; j < 3; j++) {
+          const img = document.createElement('img');
+          img.className = 'photo-slot';
+          img.src = defaultPlaceholder; 
+          img.alt = `Photo ${j + 1}`;
+          frame.appendChild(img);
+        }
+
+        frame.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!isMovedDuringDrag) {
+            openModal(currentStripPhotos);
+          }
+        });
+
+        canvas.appendChild(frame);
+        stripIndex++;
+      }
+    }
+
+    // ==========================================
+    // MODAL & ZOOM ENGINE
+    // ==========================================
+    let modalScale = 1.0;
+    let modalPointX = 0;
+    let modalPointY = 0;
+
+    function renderModalTransform() {
+      modalCard.style.transform = `translate3d(${modalPointX}px, ${modalPointY}px, 0px) scale(${modalScale})`;
+    }
+
+    function resetModalView() {
+      modalScale = 1.0;
+      modalPointX = 0;
+      modalPointY = 0;
+      renderModalTransform();
+    }
+
+    function zoomModalAt(targetScale, clientX, clientY) {
+      const newScale = Math.min(Math.max(1.0, targetScale), 3.5);
+      if (newScale === modalScale) return;
+
+      const rect = modalViewport.getBoundingClientRect();
+      const mouseX = clientX - rect.left - modalPointX;
+      const mouseY = clientY - rect.top - modalPointY;
+
+      modalPointX -= (mouseX / modalScale) * (newScale - modalScale);
+      modalPointY -= (mouseY / modalScale) * (newScale - modalScale);
+      modalScale = newScale;
+
+      // Batasi geseran agar tidak keluar jauh
+      if (modalScale === 1.0) {
+        modalPointX = 0;
+        modalPointY = 0;
+      }
+
+      renderModalTransform();
+    }
+
+    function zoomModal(amount) {
+      const rect = modalViewport.getBoundingClientRect();
+      zoomModalAt(modalScale + amount, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    }
+
+    function openModal(photos) {
+      modalCard.innerHTML = '';
+      activeModalImages = []; 
+      resetModalView();
+      
+      for (let j = 0; j < 3; j++) {
+        const img = document.createElement('img');
+        img.className = 'photo-slot';
+        img.src = defaultPlaceholder; 
+        modalCard.appendChild(img);
+        
+        getCompressedImageUrl(photos[j] || defaultPlaceholder, (compressedUrl) => {
+          img.src = compressedUrl;
+        });
+      }
+      
+      modalOverlay.classList.add('active');
+    }
+
+    function closeModal() {
+      modalOverlay.classList.remove('active');
+      activeModalImages.forEach(img => {
+        img.src = ""; 
+      });
+      activeModalImages = [];
+    }
+
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    // Modal Pan & Zoom via Mouse/Touch
+    let isModalDragging = false;
+    let modalStartXDrag = 0;
+    let modalStartYDrag = 0;
+
+    modalViewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = -e.deltaY * 0.002;
+      zoomModalAt(modalScale + zoomFactor, e.clientX, e.clientY);
+    }, { passive: false });
+
+    modalViewport.addEventListener('pointerdown', (e) => {
+      if (modalScale <= 1.0) return;
+      isModalDragging = true;
+      modalStartXDrag = e.clientX - modalPointX;
+      modalStartYDrag = e.clientY - modalPointY;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isModalDragging) return;
+      modalPointX = e.clientX - modalStartXDrag;
+      modalPointY = e.clientY - modalStartYDrag;
+      renderModalTransform();
+    });
+
+    window.addEventListener('pointerup', () => {
+      isModalDragging = false;
+    });
+
+    // ==========================================
+    // PAN & ZOOM ENGINE UTAMA (CANVAS)
+    // ==========================================
+    let scale = 1.0;
+    let pointX = (window.innerWidth / 2) - 1400;
+    let pointY = (window.innerHeight / 2) - 1400;
+    let isDragging = false;
+    let startXDrag = 0;
+    let startYDrag = 0;
+    let dragStartXPos = 0;
+    let dragStartYPos = 0;
+    let animFrameId = null;
+
+    function renderCanvasTransform() {
+      canvas.style.transform = `translate3d(${pointX}px, ${pointY}px, 0px) scale(${scale})`;
+    }
+
+    function requestCanvasRender() {
+      if (!animFrameId) {
+        animFrameId = requestAnimationFrame(() => {
+          renderCanvasTransform();
+          animFrameId = null;
+        });
+      }
+    }
+
+    function zoomCanvasAt(targetScale, clientX, clientY) {
+      const newScale = Math.min(Math.max(0.3, targetScale), 2.5);
+      if (newScale === scale) return;
+
+      const mouseX = clientX - pointX;
+      const mouseY = clientY - pointY;
+
+      pointX -= (mouseX / scale) * (newScale - scale);
+      pointY -= (mouseY / scale) * (newScale - scale);
+      scale = newScale;
+
+      requestCanvasRender();
+    }
+
+    function zoomCanvas(amount) {
+      zoomCanvasAt(scale + amount, window.innerWidth / 2, window.innerHeight / 2);
+    }
+
+    function resetCanvasView() {
+      scale = 1.0;
+      pointX = (window.innerWidth / 2) - 1400;
+      pointY = (window.innerHeight / 2) - 1400;
+      requestCanvasRender();
+    }
+
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = -e.deltaY * 0.0015;
+      zoomCanvasAt(scale + zoomFactor, e.clientX, e.clientY);
+    }, { passive: false });
+
+    window.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.controls') || modalOverlay.classList.contains('active')) return;
+      
+      isDragging = true;
+      isMovedDuringDrag = false;
+      dragStartXPos = e.clientX;
+      dragStartYPos = e.clientY;
+      startXDrag = e.clientX - pointX;
+      startYDrag = e.clientY - pointY;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      
+      const moveDistance = Math.hypot(e.clientX - dragStartXPos, e.clientY - dragStartYPos);
+      if (moveDistance > 5) {
+        isMovedDuringDrag = true;
+      }
+
+      pointX = e.clientX - startXDrag;
+      pointY = e.clientY - startYDrag;
+      requestCanvasRender();
+    });
+
+    window.addEventListener('pointerup', () => {
+      isDragging = false;
+    });
+
+    window.addEventListener('pointercancel', () => {
+      isDragging = false;
+    });
+
+    resetCanvasView();
+  </script>
+
+</body>
+</html>
