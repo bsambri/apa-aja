@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Dense Minimalist Instax Collage</title>
   <style>
     :root {
@@ -210,7 +210,7 @@
     /* Tombol Kontrol Khusus Modal di Kanan */
     .modal-controls {
       position: absolute;
-      right: 30px;
+      right: 20px;
       top: 50%;
       transform: translateY(-50%);
       display: flex;
@@ -410,7 +410,7 @@
     }
 
     // ==========================================
-    // MODAL & ZOOM ENGINE
+    // MODAL & ZOOM ENGINE (DIPAS GER & ZOOM-FIT AMAN)
     // ==========================================
     let modalScale = 1.0;
     let modalPointX = 0;
@@ -439,7 +439,6 @@
       modalPointY -= (mouseY / modalScale) * (newScale - modalScale);
       modalScale = newScale;
 
-      // Batasi geseran agar tidak keluar jauh
       if (modalScale === 1.0) {
         modalPointX = 0;
         modalPointY = 0;
@@ -470,6 +469,20 @@
       }
       
       modalOverlay.classList.add('active');
+
+      // Penyesuaian otomatis ukuran modal di HP supaya langsung pas (Fit to Screen)
+      setTimeout(() => {
+        const screenHeight = window.innerHeight;
+        const screenWidth = window.innerWidth;
+        const cardHeight = 816;
+        const cardWidth = 360;
+
+        let scaleFactor = Math.min((screenHeight * 0.82) / cardHeight, (screenWidth * 0.85) / cardWidth, 1.0);
+        if (scaleFactor < 1.0) {
+          modalScale = scaleFactor;
+          renderModalTransform();
+        }
+      }, 50);
     }
 
     function closeModal() {
@@ -487,10 +500,10 @@
       if (e.key === 'Escape') closeModal();
     });
 
-    // Modal Pan & Zoom via Mouse/Touch
-    let isModalDragging = false;
-    let modalStartXDrag = 0;
-    let modalStartYDrag = 0;
+    // Touch & Mouse Support untuk Modal (Pinch & Drag)
+    const modalPointers = new Map();
+    let modalInitialDist = 0;
+    let modalInitialScale = 1.0;
 
     modalViewport.addEventListener('wheel', (e) => {
       e.preventDefault();
@@ -499,34 +512,52 @@
     }, { passive: false });
 
     modalViewport.addEventListener('pointerdown', (e) => {
-      if (modalScale <= 1.0) return;
-      isModalDragging = true;
-      modalStartXDrag = e.clientX - modalPointX;
-      modalStartYDrag = e.clientY - modalPointY;
+      modalPointers.set(e.pointerId, e);
+      if (modalPointers.size === 1) {
+        modalStartXDrag = e.clientX - modalPointX;
+        modalStartYDrag = e.clientY - modalPointY;
+      } else if (modalPointers.size === 2) {
+        const pointersArr = Array.from(modalPointers.values());
+        modalInitialDist = Math.hypot(pointersArr[0].clientX - pointersArr[1].clientX, pointersArr[0].clientY - pointersArr[1].clientY);
+        modalInitialScale = modalScale;
+      }
     });
 
     window.addEventListener('pointermove', (e) => {
-      if (!isModalDragging) return;
-      modalPointX = e.clientX - modalStartXDrag;
-      modalPointY = e.clientY - modalStartYDrag;
-      renderModalTransform();
+      if (!modalPointers.has(e.pointerId)) return;
+      modalPointers.set(e.pointerId, e);
+
+      if (modalPointers.size === 1 && modalScale > 0.3) {
+        modalPointX = e.clientX - modalStartXDrag;
+        modalPointY = e.clientY - modalStartYDrag;
+        renderModalTransform();
+      } else if (modalPointers.size === 2) {
+        const pointersArr = Array.from(modalPointers.values());
+        const currentDist = Math.hypot(pointersArr[0].clientX - pointersArr[1].clientX, pointersArr[0].clientY - pointersArr[1].clientY);
+        if (modalInitialDist > 0) {
+          const factor = currentDist / modalInitialDist;
+          const centerX = (pointersArr[0].clientX + pointersArr[1].clientX) / 2;
+          const centerY = (pointersArr[0].clientY + pointersArr[1].clientY) / 2;
+          zoomModalAt(modalInitialScale * factor, centerX, centerY);
+        }
+      }
     });
 
-    window.addEventListener('pointerup', () => {
-      isModalDragging = false;
+    window.addEventListener('pointerup', (e) => {
+      modalPointers.delete(e.pointerId);
+      if (modalPointers.size < 2) modalInitialDist = 0;
+    });
+
+    window.addEventListener('pointercancel', (e) => {
+      modalPointers.delete(e.pointerId);
     });
 
     // ==========================================
-    // PAN & ZOOM ENGINE UTAMA (CANVAS)
+    // PAN & ZOOM ENGINE UTAMA (CANVAS DENGAN PINCH & DRAG)
     // ==========================================
     let scale = 1.0;
     let pointX = (window.innerWidth / 2) - 1400;
     let pointY = (window.innerHeight / 2) - 1400;
-    let isDragging = false;
-    let startXDrag = 0;
-    let startYDrag = 0;
-    let dragStartXPos = 0;
-    let dragStartYPos = 0;
     let animFrameId = null;
 
     function renderCanvasTransform() {
@@ -573,36 +604,66 @@
       zoomCanvasAt(scale + zoomFactor, e.clientX, e.clientY);
     }, { passive: false });
 
+    // Multi-touch Pointer tracking untuk Canvas Utama (Pinch & Pan)
+    const canvasPointers = new Map();
+    let canvasInitialDist = 0;
+    let canvasInitialScale = 1.0;
+    let canvasStartXDrag = 0;
+    let canvasStartYDrag = 0;
+    let canvasDragStartXPos = 0;
+    let canvasDragStartYPos = 0;
+
     window.addEventListener('pointerdown', (e) => {
       if (e.target.closest('.controls') || modalOverlay.classList.contains('active')) return;
       
-      isDragging = true;
-      isMovedDuringDrag = false;
-      dragStartXPos = e.clientX;
-      dragStartYPos = e.clientY;
-      startXDrag = e.clientX - pointX;
-      startYDrag = e.clientY - pointY;
+      canvasPointers.set(e.pointerId, e);
+
+      if (canvasPointers.size === 1) {
+        isMovedDuringDrag = false;
+        canvasDragStartXPos = e.clientX;
+        canvasDragStartYPos = e.clientY;
+        canvasStartXDrag = e.clientX - pointX;
+        canvasStartYDrag = e.clientY - pointY;
+      } else if (canvasPointers.size === 2) {
+        const pointersArr = Array.from(canvasPointers.values());
+        canvasInitialDist = Math.hypot(pointersArr[0].clientX - pointersArr[1].clientX, pointersArr[0].clientY - pointersArr[1].clientY);
+        canvasInitialScale = scale;
+      }
     });
 
     window.addEventListener('pointermove', (e) => {
-      if (!isDragging) return;
-      
-      const moveDistance = Math.hypot(e.clientX - dragStartXPos, e.clientY - dragStartYPos);
-      if (moveDistance > 5) {
+      if (!canvasPointers.has(e.pointerId)) return;
+      canvasPointers.set(e.pointerId, e);
+
+      if (canvasPointers.size === 1) {
+        const moveDistance = Math.hypot(e.clientX - canvasDragStartXPos, e.clientY - canvasDragStartYPos);
+        if (moveDistance > 5) {
+          isMovedDuringDrag = true;
+        }
+
+        pointX = e.clientX - canvasStartXDrag;
+        pointY = e.clientY - canvasStartYDrag;
+        requestCanvasRender();
+      } else if (canvasPointers.size === 2) {
         isMovedDuringDrag = true;
+        const pointersArr = Array.from(canvasPointers.values());
+        const currentDist = Math.hypot(pointersArr[0].clientX - pointersArr[1].clientX, pointersArr[0].clientY - pointersArr[1].clientY);
+        if (canvasInitialDist > 0) {
+          const factor = currentDist / canvasInitialDist;
+          const centerX = (pointersArr[0].clientX + pointersArr[1].clientX) / 2;
+          const centerY = (pointersArr[0].clientY + pointersArr[1].clientY) / 2;
+          zoomCanvasAt(canvasInitialScale * factor, centerX, centerY);
+        }
       }
-
-      pointX = e.clientX - startXDrag;
-      pointY = e.clientY - startYDrag;
-      requestCanvasRender();
     });
 
-    window.addEventListener('pointerup', () => {
-      isDragging = false;
+    window.addEventListener('pointerup', (e) => {
+      canvasPointers.delete(e.pointerId);
+      if (canvasPointers.size < 2) canvasInitialDist = 0;
     });
 
-    window.addEventListener('pointercancel', () => {
-      isDragging = false;
+    window.addEventListener('pointercancel', (e) => {
+      canvasPointers.delete(e.pointerId);
     });
 
     resetCanvasView();
