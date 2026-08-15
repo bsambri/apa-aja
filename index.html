@@ -159,8 +159,9 @@
       pointer-events: auto;
     }
 
-    /* Kartu Modal Statis (Tidak bisa di-drag, proporsional di HP) */
+    /* Kartu Modal Statis */
     .modal-card {
+      position: relative;
       background-color: var(--white);
       width: 320px;
       height: 720px;
@@ -185,6 +186,33 @@
       object-fit: cover;
       background-color: var(--empty-bg);
     }
+
+    /* Tombol Back / Close di Pojok Kiri Atas Modal */
+    .modal-close-btn {
+      position: absolute;
+      top: -16px;
+      left: -16px;
+      width: 38px;
+      height: 38px;
+      background-color: var(--white);
+      border: 1px solid var(--instax-border);
+      border-radius: 50%;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #333;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease, background 0.2s ease;
+      z-index: 10;
+    }
+
+    .modal-close-btn:hover {
+      background-color: #f0f0f0;
+      transform: scale(1.1);
+    }
   </style>
 </head>
 <body>
@@ -203,7 +231,9 @@
 
   <!-- Lightbox Popup Modal -->
   <div class="modal-overlay" id="modalOverlay">
-    <div class="modal-card" id="modalCard"></div>
+    <div class="modal-card" id="modalCard">
+      <button class="modal-close-btn" id="closeModalBtn" title="Tutup">✕</button>
+    </div>
   </div>
 
   <script>
@@ -211,6 +241,7 @@
     const viewport = document.getElementById('viewport');
     const modalOverlay = document.getElementById('modalOverlay');
     const modalCard = document.getElementById('modalCard');
+    const closeModalBtn = document.getElementById('closeModalBtn');
 
     // DAFTAR FOTO
     const photostripsData = [
@@ -362,7 +393,10 @@
     // MODAL ENGINE
     // ==========================================
     function openModal(photos) {
-      modalCard.innerHTML = '';
+      // Hapus slot foto lama kecuali tombol close
+      const oldSlots = modalCard.querySelectorAll('.photo-slot');
+      oldSlots.forEach(slot => slot.remove());
+
       activeModalImages = []; 
       
       for (let j = 0; j < 3; j++) {
@@ -387,7 +421,13 @@
       activeModalImages = [];
     }
 
-    // Klik area luar (overlay) untuk menutup modal, klik di dalam kartu modal tidak menutup
+    // Tombol close diklik
+    closeModalBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeModal();
+    });
+
+    // Klik area luar (overlay) untuk menutup modal
     modalOverlay.addEventListener('click', (e) => {
       if (e.target === modalOverlay) {
         closeModal();
